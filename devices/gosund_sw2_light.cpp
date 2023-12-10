@@ -1,4 +1,5 @@
-//Used reverse engineering info from: https://www.elektroda.com/rtvforum/topic4014774.html#20825305
+//For the BK7231T version (mcu v2?) I used reverse engineering info from: 
+//   https://www.elektroda.com/rtvforum/topic4014774.html#20825305
 
 #include "gosund_sw2_light.hpp"
 
@@ -17,36 +18,55 @@ namespace esphome
 
         void GosundLight::loop()
         {
-            // pattern is 0x24 0xYY 0x01 0x1E 0x23, where YY is dimmer value
-            if (available() >= 5)
+            static uint8_t pos = 0;
+            static uint8_t setupSync = 0;
+            static uint8_t mPos = 16;
+            static uint8_t tBuffer[16];
+            static float   dimmerVal = 0.0;
+            
+            if(available() > 0)
             {
-                uint8_t buff[5];
-
-                //
-                read_array(&buff[0], 5);
-                
-                if (available() > 0)
+                if(pos < mPos - 2)
+                {    
+                    read_byte(&tBuffer[pos++]);
+                    if(debugPrint)
+                        ESP_LOGD(TAG, "READ BYTE! 0x%02X", tBuffer[pos-1]);
+                }
+                else
                 {
-                    ESP_LOGD(TAG, "Unexpected bytes on uart_. ");
-                    ESP_LOGD(TAG, "  Expected: %02X %02X %02X %02X %02X", buff[0], buff[1], buff[2], buff[3], buff[4]);
-                    ESP_LOGD(TAG, "  Expected: %02X %02X %02X %02X %02X", buff[0], buff[1], buff[2], buff[3], buff[4]);
-
-                    while (available() >= 1)
+                    pos = mPos - 2;
+                    for(int i = 0;i<mPos-2;i++)
+                        tBuffer[i] = tBuffer[i+1];
+                    read_byte(&tBuffer[pos]);
+                    
+                    if(debugPrint && (tBuffer[0] == 0x24))
+                        ESP_LOGD(TAG, "READ BYTE! 0x%02X %02X %02X %02X %02X", tBuffer[0], tBuffer[1], tBuffer[2], tBuffer[3], tBuffer[4]);
+                }
+                tBuffer[pos+1] = '\0';
+                
+                //MCU v1 = 0x24 0xYY 0x01 0x1E 0x23 where 0xYY is the dimmer value
+                //MCU v2 = 0x24 0xYY 0x01 0x64 0x23 where 0xYY is the dimmer value
+                if(tBuffer[0] == 0x24)
+                {
+                    if(   tBuffer[2] == 0x01 \
+                       && ((mcuVer == 2 && tBuffer[3] == 0x64) \
+                           || \
+                           (mcuVer == 1 && tBuffer[3] == 0x1E)) \
+                       && tBuffer[4] == 0x23)
                     {
-                        read_byte(&buff[0]);
-                        ESP_LOGD(TAG, "  Unexpected: %02X", buff[0]);
+                        dimmerVal = tBuffer[1] / 150.0; //Brightness returned is 0x01 - 0x96
+                        setupSync = 1;
+                        memset(&tBuffer[0], 0, 5);
+                        if(debugPrint)
+                            ESP_LOGD(TAG, "Received dimmer value: %01.1f", dimmerVal*100);
+                    
+                        auto call = state_->make_call();
+                        // Touch sensor only works when turned on
+                        call.set_state(true);
+                        call.set_brightness(dimmerVal);
+                        call.perform();
                     }
                 }
-
-                float dimmerVal = buff[1] / 150.0; //Brightness returned is 0x01 - 0x96
-
-                auto call = state_->make_call();
-                // Touch sensor only works when turned on
-                call.set_state(true);
-                call.set_brightness(dimmerVal);
-                call.perform();
-
-                ESP_LOGD(TAG, "Received dimmer value %02X %d", buff[1], buff[1]);
             }
         }
       
@@ -68,26 +88,32 @@ namespace esphome
             if (values.get_state() > 0 && values.get_brightness() > 0)
             {
                 status_led_->turn_on();
-                ESP_LOGD(TAG, "turning on status LED");
+                if(debugPrint)
+                    ESP_LOGD(TAG, "turning on status LED");
                 
-                ledOut |= 0x40; //Indicates LED message
                 output |= 0x80; //Indicates output message
                 
-                write_byte(ledOut);
+                if(mcuVer == 2)
+                {
+                    ledOut |= 0x40; //Indicates LED message
+                    write_byte(ledOut);
+                }
                 write_byte(output);
             }
             else
             {
                 status_led_->turn_off();
-                ESP_LOGD(TAG, "turning off status LED");
+                if(debugPrint)
+                    ESP_LOGD(TAG, "turning off status LED");
                 
                 //write(0x41);
                 write(0x01); //Tell it how many LED to keep on during off
             }
-
-            ESP_LOGD(TAG, "write_state() called with state: %0.1f, brightness: %.02f => output: %02X and LED: %02X", values.get_state(), values.get_brightness(), output, ledOut);
-            
-            flush();
+            if(debugPrint)
+                if(mcuVer == 2)
+                    ESP_LOGD(TAG, "write_state() called with state: %0.1f, brightness: %.02f => output: %02X and LED: %02X", values.get_state(), values.get_brightness(), output, ledOut);
+                else
+                    ESP_LOGD(TAG, "write_state() called with state: %0.1f, brightness: %.02f => output: %02X", values.get_state(), values.get_brightness(), output);
         }
     } // namespace gosund
 } // namespace esphome

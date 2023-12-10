@@ -1,14 +1,15 @@
-Gosund SW2 Implementation for ESP Home
+Gosund SW2 (new hardware with BK7231T) Implementation for ESP Home
 =======================
+
+NOTE: Doubt this is backward compatible with the older ESP8266-based SW2 switches.
 
 Features
 --------
 - Reading of the touch sensor
-- Integration via both ESP Home Native API & MQTT
-- Additional MQTT topic for setting the brightness without changing the state of the light
+- Integration via both ESP Home Native API
 - White LED turns on when the light is on
 - Green LED flashes when first powered until wifi connects
-
+- Works in libre-tiny with new BK7231T based SW2 switches.
 
 To use
 ------

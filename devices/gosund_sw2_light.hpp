@@ -14,7 +14,7 @@ namespace esphome
                     mcuVer = _mcuVer;
                     debugPrint = _debugPrint;
                     if(mcuVer > 1)
-                        uint32_t touchCompare = 0x24016423;
+                        touchCompare = 0x24016423;
                 }
                 void setup() override;
                 void loop() override;

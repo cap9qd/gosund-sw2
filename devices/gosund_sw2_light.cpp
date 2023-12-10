@@ -48,11 +48,15 @@ namespace esphome
                 //MCU v2 = 0x24 0xYY 0x01 0x64 0x23 where 0xYY is the dimmer value
                 if(tBuffer[0] == 0x24)
                 {
-                    if(   tBuffer[2] == 0x01 \
-                       && ((mcuVer == 2 && tBuffer[3] == 0x64) \
-                           || \
-                           (mcuVer == 1 && tBuffer[3] == 0x1E)) \
-                       && tBuffer[4] == 0x23)
+                    uint32_t tCompare = (tBuffer[0] << 24 ) \
+                                      + (tBuffer[2] << 16 ) \
+                                      + (tBuffer[3] << 8 ) \
+                                      +  tBuffer[4];
+                    
+                    if(printDebug)
+                        ESP_LOGD(TAG, "Dimmer Compare 0x%08X", tCompare);
+                    
+                    if(tCompare == touchCompare)
                     {
                         dimmerVal = tBuffer[1] / 150.0; //Brightness returned is 0x01 - 0x96
                         setupSync = 1;
